@@ -366,7 +366,7 @@ def plot_3d(position,  # nx3 array (XYZ in meters)
             azim=None,  # see mpl_toolkits.mplot3d.axes3d.Axes3D.view_init
             animate=False,
             sample_rate=None,
-            auto_rotate=True,  # rotate azimuth during animation for fixed relative position
+            auto_rotate=True,  # rotate azimuth during animation
             file_name="",  # must be .gif
             fps=15,  # animation frames per second
             figsize=None,  # see matplotlib.pyplot.figure
@@ -406,9 +406,9 @@ def plot_3d(position,  # nx3 array (XYZ in meters)
 
     # Create quivers
     if matrix is not None:
-        x_quiver = axis.quiver([], [], [], [], [], [], color=RED, length=quiver_length, normalize=True, label="X")
-        y_quiver = axis.quiver([], [], [], [], [], [], color=GREEN, length=quiver_length, normalize=True, label="Y")
-        z_quiver = axis.quiver([], [], [], [], [], [], color=BLUE, length=quiver_length, normalize=True, label="Z")
+        x_quiver = axis.quiver([], [], [], [], [], [], color=RED, label="X")
+        y_quiver = axis.quiver([], [], [], [], [], [], color=GREEN, label="Y")
+        z_quiver = axis.quiver([], [], [], [], [], [], color=BLUE, label="Z")
 
         origin_line, = axis.plot([], [], [], "ko", markersize=2, zorder=numpy.inf)
 
