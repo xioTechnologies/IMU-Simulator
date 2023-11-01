@@ -27,6 +27,7 @@ jobs:
         run: |
           python 3d_animation.py
           python 3d_plot.py
+          python allan_variance.py
           python compare_real_imu.py
           python double_integration.py
           python plot_kinematics_and_imu.py
