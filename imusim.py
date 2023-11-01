@@ -1,3 +1,4 @@
+import fractalcoef
 import matplotlib.pyplot as pyplot
 import numpy
 import scipy
@@ -111,8 +112,11 @@ class Simulator:
                       sensitivity_error=numpy.array([0, 0, 0]),  # %
                       noise_density=numpy.array([0, 0, 0]),  # °/s/√Hz
                       cross_axis=numpy.array([0, 0, 0]),  # %
-                      misalignment=0):  # °
-        self.__gyroscope = Simulator.__sensor_model(self.__ideal_gyroscope, self.sample_rate, range, bandwidth, offset, sensitivity_error, noise_density, cross_axis, misalignment)
+                      misalignment=0,  # °
+                      bias_instability=numpy.array([0, 0, 0]),  # °/s
+                      number_of_poles=0,  # used for bias instability noise generation
+                      random_walk=numpy.array([0, 0, 0])):  # °/s/√Hz
+        self.__gyroscope = Simulator.__sensor_model(self.__ideal_gyroscope, self.sample_rate, range, bandwidth, offset, sensitivity_error, noise_density, cross_axis, misalignment, bias_instability, number_of_poles, random_walk)
 
     def set_accelerometer(self,
                           range=0,  # g (0 = unlimited)
@@ -121,29 +125,48 @@ class Simulator:
                           sensitivity_error=numpy.array([0, 0, 0]),  # %
                           noise_density=numpy.array([0, 0, 0]),  # g/√Hz
                           cross_axis=numpy.array([0, 0, 0]),  # %
-                          misalignment=0):  # °
-        self.__accelerometer = Simulator.__sensor_model(self.__ideal_accelerometer, self.sample_rate, range, bandwidth, offset, sensitivity_error, noise_density, cross_axis, misalignment)
+                          misalignment=0,  # °
+                          bias_instability=numpy.array([0, 0, 0]),  # g
+                          number_of_poles=0,  # used for bias instability noise generation
+                          random_walk=numpy.array([0, 0, 0])):  # g/√Hz
+        self.__accelerometer = Simulator.__sensor_model(self.__ideal_accelerometer, self.sample_rate, range, bandwidth, offset, sensitivity_error, noise_density, cross_axis, misalignment, bias_instability, number_of_poles, random_walk)
 
     @staticmethod
-    def __sensor_model(sensor, sample_rate, range, bandwidth, offset, sensitivity_error, noise_density, cross_axis, misalignment):
+    def __sensor_model(sensor, sample_rate, range, bandwidth, offset, sensitivity_error, noise_density, cross_axis, misalignment, bias_instability, number_of_poles, random_walk):
 
         # Offset
-        sensor = sensor + offset
+        sensor += offset
 
         # Noise density
-        sensor = sensor + numpy.random.normal(0, noise_density * numpy.sqrt(sample_rate / 2), sensor.shape)
+        if numpy.any(noise_density):
+            sensor += numpy.random.normal(0, noise_density * numpy.sqrt(sample_rate), sensor.shape)
+
+        # Bias instability
+        if numpy.any(bias_instability) and number_of_poles > 0:
+            end_index = number_of_poles + 1
+
+            end_index = numpy.min((end_index, len(fractalcoef.DENOMINATOR)))
+
+            sensor += scipy.signal.lfilter([1], fractalcoef.DENOMINATOR[:end_index], numpy.random.normal(0, bias_instability, sensor.shape), axis=0)
+
+        # Rate random walk
+        if numpy.any(bias_instability):
+            sensor += numpy.cumsum(numpy.random.normal(0, random_walk / numpy.sqrt(sample_rate), sensor.shape), axis=0)
 
         # Cross-axis sensitivity and misalignment
-        cross_axis_matrix = numpy.matrix([[1, cross_axis[1] / 100, cross_axis[2] / 100],
-                                          [cross_axis[0] / 100, 1, cross_axis[2] / 100],
-                                          [cross_axis[0] / 100, cross_axis[1] / 100, 1]])
+        if numpy.any(cross_axis) or misalignment != 0:
+            cross_axis_matrix = numpy.matrix([[1, cross_axis[1] / 100, cross_axis[2] / 100],
+                                              [cross_axis[0] / 100, 1, cross_axis[2] / 100],
+                                              [cross_axis[0] / 100, cross_axis[1] / 100, 1]])
 
-        misalignment_matrix = Quaternion(axis=[1, 1, 1], angle=misalignment).to_matrix()
+            misalignment_matrix = Quaternion(axis=[1, 1, 1], angle=misalignment).to_matrix()
 
-        sensor = numpy.array([(cross_axis_matrix * misalignment_matrix * numpy.matrix(a).T).A1 for a in sensor])
+            combined_matrix = cross_axis_matrix * misalignment_matrix
+
+            sensor = numpy.array([(combined_matrix * numpy.matrix(a).T).A1 for a in sensor])
 
         # Sensitivity error
-        sensor = sensor * (1 + (sensitivity_error / 100))
+        sensor *= 1 + (sensitivity_error / 100)
 
         # Bandwidth
         if bandwidth > 0:
