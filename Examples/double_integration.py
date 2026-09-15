@@ -9,19 +9,26 @@ simulator = imusim.Simulator("indoor_forward_10_davis_with_gt/groundtruth.txt", 
 # simulator.set_accelerometer(offset=numpy.ones(3) * 0.01)  # 10 mg
 
 # Process IMU measurements using Fusion
-ahrs = imufusion.Ahrs()
-
-ahrs.settings = imufusion.Settings(imufusion.CONVENTION_NWU, 0, 0, 0, 0, 0)  # 0 gain so that only gyroscope is used
-ahrs.quaternion = imufusion.Quaternion(simulator.quaternion[0])
+ahrs = (
+    imufusion.Ahrs()
+    .set_settings(
+        imufusion.AhrsSettings(
+            sample_rate=simulator.sample_rate,
+            gain=0,  # zero gain so that only gyroscope is used
+        )
+    )
+    .set_quaternion(simulator.quaternion[0])
+    .skip_startup()
+)
 
 euler = numpy.empty_like(simulator.euler)
 acceleration = numpy.empty_like(simulator.acceleration)
 
 for index, (gyroscope, accelerometer) in enumerate(zip(simulator.gyroscope, simulator.accelerometer)):
-    ahrs.update_no_magnetometer(gyroscope, accelerometer, 1 / simulator.sample_rate)
+    ahrs.update_no_magnetometer(gyroscope, accelerometer)
 
-    euler[index] = ahrs.quaternion.to_euler()
-    acceleration[index] = ahrs.earth_acceleration * imusim.Simulator.GRAVITY
+    euler[index] = imufusion.quaternion_to_euler(ahrs.get_quaternion())
+    acceleration[index] = ahrs.get_earth_acceleration() * imusim.Simulator.GRAVITY
 
 # Calculate velocity snd position (double integration)
 velocity = numpy.cumsum(acceleration, axis=0) / simulator.sample_rate
